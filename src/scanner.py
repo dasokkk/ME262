@@ -316,39 +316,35 @@ class ScannerAgent:
     
 
     def _recv_packet(self, pkt):
-        
         if TCP in pkt and IP in pkt:
             src_ip = pkt[IP].src
             src_port = pkt[TCP].sport
             flags = pkt[TCP].flags
-            
-            
-            if src_port in self._sent_timestamps:
+
+            with self._lock:
+                if src_port not in self._sent_timestamps:
+                    return
                 rtt = (time.time() - self._sent_timestamps[src_port]) * 1000.0
-                
+
                 # SYN-ACK -> Open
                 if flags == 0x12:
                     result = "open"
                     self._open_ports.append(src_port)
-                    
-                
                 elif flags & 0x04:
                     result = "closed"
                 else:
                     return
-                
-                
+
                 del self._sent_timestamps[src_port]
-                
-                
-                ev = ScanEvent(
-                    timestamp=time.time(),
-                    src_ip=pkt[IP].dst,
-                    dst_ip=src_ip,
-                    dst_port=src_port,
-                    scan_type=self.scan_type,
-                    result=result,
-                    duration_ms=rtt,
-                    handshake_complete=False # Half-open
-                )
-                self.event_queue.put(ev)
+
+            ev = ScanEvent(
+                timestamp=time.time(),
+                src_ip=pkt[IP].dst,
+                dst_ip=src_ip,
+                dst_port=src_port,
+                scan_type=self.scan_type,
+                result=result,
+                duration_ms=rtt,
+                handshake_complete=False  # Half-open
+            )
+            self.event_queue.put(ev)

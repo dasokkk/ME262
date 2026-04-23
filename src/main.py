@@ -302,7 +302,26 @@ def main():
     ui.console.print()
     
     # Start the Wireshark-like background sniffing
-    ids_agent.start(use_custom_rules=cfg_ids.get("use_custom_rules", False))
+    ids_ready = ids_agent.start(use_custom_rules=cfg_ids.get("use_custom_rules", False))
+
+    if not ids_ready and ids_agent._running:
+        # Suricata process is alive but didn't emit the ready signal in time
+        choice = ui.ids_timeout_prompt()
+        if choice == "wait":
+            extra_wait = cfg_ids.get("startup_wait_extra", 120)
+            ui.info(f"Waiting up to {extra_wait}s more for Suricata …  (Ctrl+C to abort)")
+            ids_ready = ids_agent.wait_for_ready(extra_wait)
+            if ids_ready:
+                ui.info("Suricata IDS ready ✓")
+            else:
+                ui.warn(
+                    f"Suricata still not ready after {extra_wait}s — "
+                    "proceeding without IDS confirmation."
+                )
+        else:
+            ui.warn("Skipping IDS wait — scanning without confirmed IDS monitoring.")
+    elif not ids_ready:
+        ui.warn("Suricata failed to start — scanning without IDS.")
     
     
     scanner.start()
@@ -359,8 +378,19 @@ def main():
                     ui.suricata_alert(alerts)
 
                     ui.info("AI is analysing the detection …")
-                    analysis = ai.analyze_suricata_alerts(alerts, scanner.params_dict)
-                    ui.ai_message(analysis)
+                    ui.console.print()
+                    ui.console.print("  [bold blue]🤖 AI Analyst[/bold blue]  ", end="")
+
+                    # Stream tokens to terminal as they arrive — no silent wait
+                    stream_buf = []
+                    def _stream(token):
+                        stream_buf.append(token)
+                        ui.console.print(token, end="", highlight=False)
+
+                    analysis = ai.analyze_suricata_alerts(
+                        alerts, scanner.params_dict, stream_fn=_stream
+                    )
+                    ui.console.print()  # newline after streamed output
 
                     
                     while True:

@@ -59,7 +59,7 @@ class ConsoleUI:
     ) -> Dict:
         
         self.console.print(
-            Rule("[bold yellow]⚙  Setup Wizard[/bold yellow]", style="yellow")
+            Rule("[bold yellow]  Setup Wizard[/bold yellow]", style="yellow")
         )
         self.console.print()
 
@@ -83,15 +83,15 @@ class ConsoleUI:
 
         profile_info = {
             "aggressive": (
-                "🔥 Aggressive",
+                "Aggressive",
                 "High rate (20/s), low timeout, fixed timing — fast & loud",
             ),
             "normal": (
-                "⚡ Normal",
+                "Normal",
                 "Moderate rate (3/s), jitter timing — balanced",
             ),
             "stealth": (
-                "🤫 Stealth",
+                "Stealth",
                 "Low rate (0.5/s), random ports, long-tail delays — quiet",
             ),
         }
@@ -188,7 +188,7 @@ class ConsoleUI:
 
         
         self.console.print(
-            Rule("[bold yellow]📋  Configuration Summary[/bold yellow]", style="yellow")
+            Rule("[bold yellow]  Configuration Summary[/bold yellow]", style="yellow")
         )
         self.console.print()
 
@@ -250,6 +250,8 @@ class ConsoleUI:
             icon, style = "·", "dim"
         elif event.result == "filtered":
             icon, style = "🔒", "yellow"
+        elif event.result == "sent":
+            icon, style = "→", "dim"
         else:
             icon, style = "⚠", "red"
 
@@ -270,13 +272,43 @@ class ConsoleUI:
             highlight=False,
         )
 
+    # ── IDS timeout prompt ────────────────────────────────────────────────────
+
+    def ids_timeout_prompt(self) -> str:
+        """Suricata belirtilen sürede hazır olmadığında operatöre ne yapılacağını sorar.
+
+        Returns 'wait' or 'skip'.
+        """
+        self.console.print()
+        self.console.print(
+            Rule("[bold yellow]  Suricata Not Ready[/bold yellow]", style="yellow")
+        )
+        self.console.print()
+        self.console.print(
+            "  [yellow]⚠[/yellow]  Suricata did not confirm readiness within the timeout.\n"
+        )
+        self.console.print(
+            "     [bold]1.[/bold] [cyan]Wait[/cyan]     — Keep waiting for Suricata to finish loading rules"
+        )
+        self.console.print(
+            "     [bold]2.[/bold] [cyan]Skip IDS[/cyan] — Start scanning immediately without IDS monitoring"
+        )
+        self.console.print()
+        choice = Prompt.ask(
+            "     [cyan]Choice[/cyan]",
+            choices=["1", "2"],
+            default="1",
+        )
+        self.console.print()
+        return "wait" if choice == "1" else "skip"
+
     
 
     def suricata_alert(self, alerts: List):
         self.console.print()
         self.console.print(
             Rule(
-                f"[bold red]⚠️  SURICATA IDS ALERT ({len(alerts)}) — SCAN PAUSED  ⚠️[/bold red]",
+                f"[bold red]  SURICATA IDS ALERT ({len(alerts)}) — SCAN PAUSED  [/bold red]",
                 style="red",
             )
         )
@@ -327,7 +359,7 @@ class ConsoleUI:
     def user_prompt(self) -> str:
         self.console.print()
         return Prompt.ask(
-            "[bold cyan]🎯 What should we do now?[/bold cyan]  "
+            "[bold cyan] What should we do now?[/bold cyan]  "
             "[dim](type 'resume' to continue, 'quit' to stop)[/dim]"
         )
 

@@ -175,8 +175,25 @@ class AIController:
 
      
 
-    def _chat(self, user_content: str) -> str:
+    MAX_HISTORY = 20
+
+    def _trim_history(self):
+        """Keep system prompt + most recent MAX_HISTORY messages."""
+        system = [m for m in self.messages if m["role"] == "system"]
+        turns  = [m for m in self.messages if m["role"] != "system"]
+        if len(turns) > self.MAX_HISTORY:
+            turns = turns[-self.MAX_HISTORY:]
+        self.messages = system + turns
+
+    def _chat(self, user_content: str, stream_fn: Callable = None) -> str:
+        """Send a message and return the full reply.
+
+        If stream_fn is provided it is called with each text chunk as it
+        arrives, so the UI can print tokens in real-time instead of waiting
+        for the whole response.
+        """
         self.messages.append({"role": "user", "content": user_content})
+        self._trim_history()
 
         try:
             r = requests.post(
@@ -184,16 +201,34 @@ class AIController:
                 json={
                     "model": self.model,
                     "messages": self.messages,
-                    "stream": False,
+                    "stream": True,          # always stream — avoids long silent wait
                 },
+                stream=True,
                 timeout=self.chat_timeout,
             )
-            if r.status_code == 200:
-                reply = r.json()["message"]["content"]
-                self.messages.append({"role": "assistant", "content": reply})
-                return reply
-            else:
+            if r.status_code != 200:
                 return f"[Ollama HTTP {r.status_code}] {r.text[:200]}"
+
+            full_reply = []
+            for raw_line in r.iter_lines():
+                if not raw_line:
+                    continue
+                try:
+                    chunk = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+                token = chunk.get("message", {}).get("content", "")
+                if token:
+                    full_reply.append(token)
+                    if stream_fn:
+                        stream_fn(token)
+                if chunk.get("done"):
+                    break
+
+            reply = "".join(full_reply)
+            self.messages.append({"role": "assistant", "content": reply})
+            return reply
+
         except requests.ConnectionError:
             return "[AI Offline] Cannot reach Ollama. Is it running?"
         except requests.ReadTimeout:
@@ -206,27 +241,39 @@ class AIController:
 
      
 
-    def analyze_suricata_alerts(self, alerts: List, scanner_params: Dict) -> str:
-         
-        prompt = "🚨 **SURICATA IDS DETECTIONS**\n"
-        for i, alert in enumerate(alerts, 1):
+    def analyze_suricata_alerts(self, alerts: List, scanner_params: Dict,
+                                stream_fn: Callable = None) -> str:
+        # Deduplicate: group by signature_id to avoid sending dozens of identical
+        # alert blocks when the same rule fires repeatedly (wastes tokens, slows response).
+        seen: Dict[int, dict] = {}
+        for alert in alerts:
+            if alert.signature_id not in seen:
+                seen[alert.signature_id] = {
+                    "signature": alert.signature,
+                    "category":  alert.category,
+                    "rule_logic": alert.rule_logic,
+                    "ports": [],
+                }
+            seen[alert.signature_id]["ports"].append(alert.dst_port)
+
+        prompt = f"🚨 SURICATA DETECTIONS ({len(alerts)} alerts, {len(seen)} unique signatures)\n"
+        for sid, info in seen.items():
+            ports_str = ", ".join(str(p) for p in sorted(set(info["ports"]))[:10])
+            if len(info["ports"]) > 10:
+                ports_str += f" … (+{len(info['ports'])-10} more)"
             prompt += (
-                f"\n[Alert {i}]\n"
-                f"- Signature ID : {alert.signature_id}\n"
-                f"- Signature    : {alert.signature}\n"
-                f"- Category     : {alert.category}\n"
-                f"- Target Port  : {alert.dst_port}\n"
-                f"- Rule Logic   : {alert.rule_logic}\n"
+                f"\n[SID {sid}] {info['signature']}\n"
+                f"  Category  : {info['category']}\n"
+                f"  Ports hit : {ports_str}\n"
+                f"  Rule      : {info['rule_logic']}\n"
             )
-            
+
         prompt += (
-            f"\nCurrent scanner parameters:\n"
-            f"{json.dumps(scanner_params, indent=2)}\n\n"
-            "Analyse these Suricata IDS detections. Explain what triggered them, "
-            "how the current scanner parameters relate to the signatures, "
-            "and what the operator's options are to bypass these signatures."
+            f"\nScanner params: {json.dumps(scanner_params)}\n\n"
+            "Brief analysis: what triggered these, why, and top 2 evasion options."
         )
-        return self._chat(prompt)
+        return self._chat(prompt, stream_fn=stream_fn)
+
 
     def process_user_input(self, user_input: str,
                            scanner_params: Dict) -> str:

@@ -9,6 +9,7 @@ import re
 import os
 import json
 import time
+import select
 import subprocess
 import threading
 from typing import List, Dict, Optional
@@ -79,6 +80,7 @@ class SuricataAgent:
         
         if os.path.exists(self.eve_log):
             try: os.remove(self.eve_log)
+            
             except: pass
             
          
@@ -93,39 +95,94 @@ class SuricataAgent:
         ]
         
         if use_custom_rules:
-            
-            cmd.extend(["-S", custom_rules_path])
-            if os.path.exists(main_rules):
-                cmd.extend(["-s", main_rules])
+            # Suricata does not allow mixing -s and -S flags.
+            # Merge custom rules + main rules into a single combined file, then use one -S.
+            combined_rules_path = os.path.join(self.log_dir, "combined.rules")
+            with open(combined_rules_path, "w") as out:
+                # Write custom rules first
+                if os.path.exists(custom_rules_path):
+                    with open(custom_rules_path, "r") as f:
+                        out.write(f.read())
+                # Append main ruleset if available
+                if os.path.exists(main_rules):
+                    with open(main_rules, "r", errors="ignore") as f:
+                        out.write(f.read())
+            cmd.extend(["-S", combined_rules_path])
         else:
-             
             if os.path.exists(main_rules):
                 cmd.extend(["-S", main_rules])
             else:
-                 
-                print("  [yellow]⚠  No rule files found! Suricata will run with defaults.[/yellow]")
+                console.print("  [yellow]  No rule files found! Suricata will run with defaults.[/yellow]")
 
          
         self._suricata_proc = subprocess.Popen(
             cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True
         )
         self._running = True
-        
-         
-        wait_time = 20.0 if os.path.exists(main_rules) else 3.0
-        console.print(f"\n  [blue]Waiting for Suricata IDS to load rules ({int(wait_time)}s)[/blue]")
-        time.sleep(wait_time) 
-        
-        # CHECK IF SURICATA CRASHED
+
+        MAX_WAIT = 60.0
+        start_time = time.time()
+
+        console.print("\n  [blue] Waiting for Suricata IDS to finish loading rules …[/blue]")
+        ready = self._poll_engine_ready(MAX_WAIT)
+
+        # Process crashed during startup
         if self._suricata_proc.poll() is not None:
-            err = self._suricata_proc.stderr.read()
-            print(f"\n  [bold red]✖  Suricata failed to start![/bold red]")
-            print(f"  [dim]{err}[/dim]\n")
+            remaining_err = self._suricata_proc.stderr.read()
+            console.print("\n  [bold red]✖  Suricata failed to start![/bold red]")
+            console.print(f"  [dim]{remaining_err.strip()}[/dim]\n")
             self._running = False
-            return
-        
+            return False
+
+        elapsed = time.time() - start_time
+        if ready:
+            console.print(f"  [green]✓ Suricata IDS ready ({elapsed:.1f}s) — rules loaded, capturing traffic[/green]")
+        else:
+            console.print(f"  [yellow]⚠  Suricata readiness signal not received within {MAX_WAIT:.0f}s[/yellow]")
+
+        # Tail thread başlatılıyor — _tail_eve_json zaten eve.json yoksa bekliyor
         self._tail_thread = threading.Thread(target=self._tail_eve_json, daemon=True)
         self._tail_thread.start()
+
+        return ready
+
+    _READY_MARKERS = (
+        "Engine started.",
+        "engine started",
+        "all 1 packet processing threads",
+        "packet processing threads started",
+    )
+
+    def _poll_engine_ready(self, timeout: float) -> bool:
+        """Suricata stderr'ını ve eve.json dosyasını kontrol ederek engine-ready sinyali arar."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._suricata_proc.poll() is not None:
+                return False
+            
+            # 1. Stderr kontrolü (READY_MARKERS)
+            rlist, _, _ = select.select([self._suricata_proc.stderr], [], [], 0.2)
+            if rlist:
+                line = self._suricata_proc.stderr.readline()
+                if line and any(m in line for m in self._READY_MARKERS):
+                    return True
+            
+            # 2. Back-up kontrol: eve.json oluştu mu ve içinde veri var mı?
+            # Eğer eve.json varsa ve içinde veri varsa, motor kesinlikle başlamıştır.
+            if os.path.exists(self.eve_log) and os.path.getsize(self.eve_log) > 0:
+                return True
+                
+        return False
+
+    def wait_for_ready(self, extra_timeout: float = 120.0) -> bool:
+        """start() timeout'a düştükten sonra ek süre bekler.
+
+        Returns True if Suricata became ready within *extra_timeout* seconds.
+        Stderr pipe hâlâ açık olduğundan kaldığı yerden okumaya devam eder.
+        """
+        if not self._running or self._suricata_proc.poll() is not None:
+            return False
+        return self._poll_engine_ready(extra_timeout)
 
     def _tail_eve_json(self):
          
