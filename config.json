@@ -1,0 +1,20 @@
+{
+    "ai": {
+        "model": "f0rc3ps/nu11secur1tyAI:latest",
+        "base_url": "http://localhost:11434",
+        "timeout": 120
+    },
+    "scanner": {
+        "default_profile": "normal",
+        "port_strategy": "top",
+        "scan_rate": null,
+        "timeout": null
+    },
+    "ids": {
+        "time_window": 10.0,
+        "detection_threshold": 0.45,
+        "check_interval": 2.5,
+        "cooldown_after_resume": 4.0,
+        "use_custom_rules": false
+    }
+}
