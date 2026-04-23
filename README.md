@@ -1,6 +1,11 @@
-║ ME262 - AI-Adaptive Stealth Scanner & Active IDS ║
+<h1 align="center">║ ME262 - AI-Adaptive Stealth Scanner & Active IDS ║</h1>
 
-
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54" />
+  <img src="https://img.shields.io/badge/Scapy-EE0000?style=for-the-badge&logo=scapy&logoColor=white" />
+  <img src="https://img.shields.io/badge/Suricata-EF3B24?style=for-the-badge&logo=suricata&logoColor=white" />
+  <img src="https://img.shields.io/badge/Ollama-black?style=for-the-badge&logo=ollama&logoColor=white" />
+</p>
 **ME262** is a next-generation, high-performance network reconnaissance tool designed to bypass modern Intrusion Detection Systems (IDS) using AI-driven packet crafting and behavioral analysis.
 
 ---
