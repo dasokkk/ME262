@@ -70,6 +70,35 @@ ME262 includes a "Paranoid Mode" in `config.json` that enables custom high-sensi
     "use_custom_rules": true
 }
 ```
+---
+
+## Screenshots:
+
+<img width="989" height="776" alt="Ekran görüntüsü 2026-04-23 151736" src="https://github.com/user-attachments/assets/2e290955-06fc-4694-a760-fbd13ddc349b" />
+
+---
+
+<img width="1104" height="553" alt="Ekran görüntüsü 2026-04-23 151811" src="https://github.com/user-attachments/assets/49cb945d-0cb2-43d3-be2b-5848089ed9c6" />
+
+---
+
+<img width="1103" height="609" alt="Ekran görüntüsü 2026-04-23 151851" src="https://github.com/user-attachments/assets/3ecc15ca-36bc-428a-b300-8b6a51999d9b" />
+
+---
+
+<img width="1094" height="565" alt="Ekran görüntüsü 2026-04-23 151913" src="https://github.com/user-attachments/assets/c4f04ec1-e380-4b14-bc60-ad786f1b6c96" />
+
+---
+
+<img width="1045" height="744" alt="Ekran görüntüsü 2026-04-23 151930" src="https://github.com/user-attachments/assets/11d2d0fc-acd5-42fb-9d07-84c7235fe881" />
+
+---
+
+## Suggested AI Config After Detection:
+
+---
+
+<img width="1101" height="313" alt="Ekran görüntüsü 2026-04-23 152217" src="https://github.com/user-attachments/assets/e9fb491d-2c93-45ff-9158-c11b1bc39aed" />
 
 ---
 
