@@ -12,9 +12,12 @@
 
 ## Features
 
+- **Interactive Setup Wizard:** Effortlessly configure targets, profiles, evasion techniques, and AI models through a guided console UI.
 - **Advanced Evasion Engine:** Every packet is unique. ME262 randomizes TTL, TCP Window Size, IP ID, and shuffles TCP Options (MSS, SackOK, WScale) to defeat signature-based detection.
+- **Evasion Suite:** Extensive evasion techniques including App-Layer Spoofing (HTTP/TLS/DNS), Full Connect scans, real SSL/TLS handshakes, Proxy Routing, and IP Fragmentation (MTU).
 - **Real-Time IDS Feedback:** Integrated with **Suricata IDS**. The scanner monitors its own detection rate in real-time.
 - **AI-Powered Analyst:** Powered by **Ollama**, the built-in AI analyst reads live Suricata logs and provides strategic advice on how to adjust parameters to remain stealthy.
+- **Operational Control & "No-AI" Fallback:** Includes a robust fallback mechanism with real-time detection alerting to enhance stealth and operator control against NGNIPS when AI is disabled.
 - **Stealth SYN Scanning:** High-performance, half-open scanning that evades kernel-level connection logging.
 
 ---
