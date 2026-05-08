@@ -149,6 +149,46 @@ def build_parser() -> argparse.ArgumentParser:
         help="Only show open ports and IDS alerts",
     )
     p.add_argument(
+        "-g",
+        type=int,
+        dest="source_port",
+        help="Use given source port number",
+    )
+    p.add_argument(
+        "--disable-ai",
+        action="store_true",
+        help="Disable AI analysis completely (Auto-enabled if 'noai' is chosen as model)",
+    )
+    p.add_argument(
+        "--disable-ids",
+        action="store_true",
+        help="Disable Suricata IDS monitoring. Skips detection logic and alerts.",
+    )
+    p.add_argument(
+        "--spoof-app",
+        action="store_true",
+        help="[EVASION] Spoof app-layer payloads (HTTP GET/TLS Hello/DNS) to bypass NGNIPS Application Awareness.",
+    )
+    p.add_argument(
+        "--full-connect",
+        action="store_true",
+        help="[EVASION] Complete 3-way TCP handshake (Connect Scan) and close gracefully to evade stateful IPS.",
+    )
+    p.add_argument(
+        "--ssl-scan",
+        action="store_true",
+        help="[EVASION] Perform actual SSL/TLS handshakes on open ports to blind NGNIPS Content Awareness.",
+    )
+    p.add_argument(
+        "--proxy",
+        help="[EVASION] Route scans through proxies (comma-separated, e.g. socks5://127.0.0.1:9050) for IP Rotation.",
+    )
+    p.add_argument(
+        "--mtu",
+        type=int,
+        help="[EVASION] Fragment packets to the specified MTU (must be mult. of 8, e.g. 8, 16) to bypass signature-based IDS.",
+    )
+    p.add_argument(
         "-i", "--interactive",
         action="store_true",
         help="Force interactive setup wizard",
@@ -200,6 +240,18 @@ def main():
         rate_override = wizard.get("rate") or cfg_scanner.get("scan_rate")
         timeout_override = wizard.get("timeout") or cfg_scanner.get("timeout")
         quiet = args.quiet
+        
+        if model.lower() == "noai":
+            disable_ai = True
+        else:
+            disable_ai = getattr(args, "disable_ai", False)
+
+        spoof_app = wizard.get("spoof_app", False)
+        full_connect = wizard.get("full_connect", False)
+        ssl_scan = wizard.get("ssl_scan", False)
+        proxy = wizard.get("proxy", None)
+        mtu = wizard.get("mtu", None)
+        disable_ids = wizard.get("disable_ids", False)
     else:
         target = args.target
         model = cli_model or default_model
@@ -210,13 +262,33 @@ def main():
         timeout_override = args.timeout if args.timeout is not None else cfg_scanner.get("timeout")
         quiet = args.quiet
 
+        spoof_app = getattr(args, "spoof_app", False)
+        full_connect = getattr(args, "full_connect", False)
+        ssl_scan = getattr(args, "ssl_scan", False)
+        proxy = getattr(args, "proxy", None)
+        mtu = getattr(args, "mtu", None)
+
+    source_port = getattr(args, "source_port", None)
     
-    ai = AIController(
-        model=model,
-        base_url=cfg_ai.get("base_url", "http://localhost:11434"),
-        chat_timeout=cfg_ai.get("timeout", 600),
-        log_fn=lambda msg: ui.info(msg),
-    )
+    if mtu is not None and mtu % 8 != 0:
+        print("[!] Error: MTU must be a multiple of 8.")
+        sys.exit(1)
+
+    if not need_wizard:
+        disable_ai = getattr(args, "disable_ai", False)
+        if model.lower() == "noai":
+            disable_ai = True
+        disable_ids = getattr(args, "disable_ids", False)
+
+    
+    ai = None
+    if not disable_ai:
+        ai = AIController(
+            model=model,
+            base_url=cfg_ai.get("base_url", "http://localhost:11434"),
+            chat_timeout=cfg_ai.get("timeout", 600),
+            log_fn=lambda msg: ui.info(msg),
+        )
 
     def _pull_progress(status, completed, total):
         if total > 0:
@@ -234,19 +306,20 @@ def main():
                 end="", highlight=False,
             )
 
-    ui.info("Checking Ollama …")
-    if not ai.ensure_ready(progress_fn=_pull_progress):
-        ui.console.print()
-        ui.error("Ollama setup failed.")
-        if not ai.is_ollama_installed():
-            ui.info(
-                "Install Ollama on Kali:  "
-                "[bold]curl -fsSL https://ollama.com/install.sh | sh[/bold]"
-            )
-        return
+    if not disable_ai:
+        ui.info("Checking Ollama …")
+        if not ai.ensure_ready(progress_fn=_pull_progress):
+            ui.console.print()
+            ui.error("Ollama setup failed.")
+            if not ai.is_ollama_installed():
+                ui.info(
+                    "Install Ollama on Kali:  "
+                    "[bold]curl -fsSL https://ollama.com/install.sh | sh[/bold]"
+                )
+            return
 
-    ui.console.print()
-    ui.info(f"Ollama ready  ·  model: [bold]{model}[/bold]")
+        ui.console.print()
+        ui.info(f"Ollama ready  ·  model: [bold]{model}[/bold]")
 
     
     if not iface:
@@ -279,11 +352,25 @@ def main():
         scanner.update_params(scan_rate=rate_override)
     if timeout_override is not None:
         scanner.update_params(timeout=timeout_override)
+    if source_port is not None:
+        scanner.update_params(source_port=source_port)
+    if spoof_app:
+        scanner.update_params(spoof_app=spoof_app)
+    if full_connect:
+        scanner.update_params(full_connect=full_connect)
+    if ssl_scan:
+        scanner.update_params(ssl_scan=ssl_scan)
+    if proxy is not None:
+        scanner.update_params(proxy=proxy)
+    if mtu is not None:
+        scanner.update_params(mtu=mtu)
 
-    ids_agent = SuricataAgent(
-        target=target,
-        iface=iface
-    )
+    ids_agent = None
+    if not disable_ids:
+        ids_agent = SuricataAgent(
+            target=target,
+            iface=iface
+        )
 
     
     DETECTION_THRESHOLD = cfg_ids.get("detection_threshold", 0.45)
@@ -301,27 +388,26 @@ def main():
     ui.info(f"Launching scan against [bold]{target}[/bold] …")
     ui.console.print()
     
-    # Start the Wireshark-like background sniffing
-    ids_ready = ids_agent.start(use_custom_rules=cfg_ids.get("use_custom_rules", False))
+    if not disable_ids:
+        ids_ready = ids_agent.start(use_custom_rules=cfg_ids.get("use_custom_rules", False))
 
-    if not ids_ready and ids_agent._running:
-        # Suricata process is alive but didn't emit the ready signal in time
-        choice = ui.ids_timeout_prompt()
-        if choice == "wait":
-            extra_wait = cfg_ids.get("startup_wait_extra", 120)
-            ui.info(f"Waiting up to {extra_wait}s more for Suricata …  (Ctrl+C to abort)")
-            ids_ready = ids_agent.wait_for_ready(extra_wait)
-            if ids_ready:
-                ui.info("Suricata IDS ready ✓")
+        if not ids_ready and ids_agent._running:
+            choice = ui.ids_timeout_prompt()
+            if choice == "wait":
+                extra_wait = cfg_ids.get("startup_wait_extra", 120)
+                ui.info(f"Waiting up to {extra_wait}s more for Suricata …  (Ctrl+C to abort)")
+                ids_ready = ids_agent.wait_for_ready(extra_wait)
+                if ids_ready:
+                    ui.info("Suricata IDS ready ✓")
+                else:
+                    ui.warn(
+                        f"Suricata still not ready after {extra_wait}s — "
+                        "proceeding without IDS confirmation."
+                    )
             else:
-                ui.warn(
-                    f"Suricata still not ready after {extra_wait}s — "
-                    "proceeding without IDS confirmation."
-                )
-        else:
-            ui.warn("Skipping IDS wait — scanning without confirmed IDS monitoring.")
-    elif not ids_ready:
-        ui.warn("Suricata failed to start — scanning without IDS.")
+                ui.warn("Skipping IDS wait — scanning without confirmed IDS monitoring.")
+        elif not ids_ready:
+            ui.warn("Suricata failed to start — scanning without IDS.")
     
     
     scanner.start()
@@ -355,12 +441,12 @@ def main():
                     if ev.result == "open" or event_count % 2 == 0:
                         ui.scan_event(ev)
 
-            if batch and event_count % 8 == 0 and not quiet:
+            if batch and event_count % 8 == 0 and not quiet and not disable_ids:
                 ui.ids_status(ids_agent.stats)
 
             
             now = time.time()
-            if now - last_ids_check >= IDS_CHECK_INTERVAL:
+            if not disable_ids and now - last_ids_check >= IDS_CHECK_INTERVAL:
                 last_ids_check = now
                 alerts = ids_agent.get_new_alerts()
 
@@ -377,44 +463,51 @@ def main():
 
                     ui.suricata_alert(alerts)
 
-                    ui.info("AI is analysing the detection …")
-                    ui.console.print()
-                    ui.console.print("  [bold blue]🤖 AI Analyst[/bold blue]  ", end="")
+                    if not disable_ai:
+                        ui.info("AI is analysing the detection …")
+                        ui.console.print()
+                        ui.console.print("  [bold blue]AI Analyst[/bold blue]  ", end="")
 
-                    # Stream tokens to terminal as they arrive — no silent wait
-                    stream_buf = []
-                    def _stream(token):
-                        stream_buf.append(token)
-                        ui.console.print(token, end="", highlight=False)
+                        stream_buf = []
+                        def _stream(token):
+                            stream_buf.append(token)
+                            ui.console.print(token, end="", highlight=False)
 
-                    analysis = ai.analyze_suricata_alerts(
-                        alerts, scanner.params_dict, stream_fn=_stream
-                    )
-                    ui.console.print()  # newline after streamed output
+                        analysis = ai.analyze_suricata_alerts(
+                            alerts, scanner.params_dict, stream_fn=_stream
+                        )
+                        ui.console.print()  
 
                     
-                    while True:
-                        user_input = ui.user_prompt()
-                        cmd = user_input.lower().strip()
+                        while True:
+                            user_input = ui.user_prompt()
+                            cmd = user_input.lower().strip()
 
-                        if cmd in ("quit", "exit", "stop", "q"):
+                            if cmd in ("quit", "exit", "stop", "q"):
+                                scanner.stop()
+                                ui.info("Scan terminated by operator.")
+                                return
+
+                            if cmd in ("resume", "continue", "go", "r", "c", ""):
+                                break
+
+                            ui.info("AI is processing …")
+                            response = ai.process_user_input(
+                                user_input, scanner.params_dict
+                            )
+                            ui.ai_message(response)
+
+                            new_params = ai.extract_params(response)
+                            if new_params:
+                                scanner.update_params(**new_params)
+                                ui.param_change(new_params)
+                    else:
+                        from rich.prompt import Confirm
+                        ui.console.print("\n  [bold red]IDS ALERT! Detection occurred and AI is disabled.[/bold red]")
+                        if not Confirm.ask("  [cyan]Do you want to continue[/cyan]", default=False):
                             scanner.stop()
                             ui.info("Scan terminated by operator.")
                             return
-
-                        if cmd in ("resume", "continue", "go", "r", "c", ""):
-                            break
-
-                        ui.info("AI is processing …")
-                        response = ai.process_user_input(
-                            user_input, scanner.params_dict
-                        )
-                        ui.ai_message(response)
-
-                        new_params = ai.extract_params(response)
-                        if new_params:
-                            scanner.update_params(**new_params)
-                            ui.param_change(new_params)
 
                     ui.resuming()
                     ids_agent.alerts.clear()
@@ -430,12 +523,13 @@ def main():
         ui.info("Interrupted (Ctrl+C)")
     finally:
         scanner.stop()
-        ids_agent.stop()
+        if not disable_ids:
+            ids_agent.stop()
         elapsed = time.time() - scan_start
         ui.scan_complete({
             "Duration": f"{elapsed:.1f}s",
             "Total probes": scanner.scan_count,
-            "IDS alerts": len(ids_agent.alerts),
+            "IDS alerts": len(ids_agent.alerts) if not disable_ids else 0,
             "Target": target,
         }, open_ports=scanner.open_ports)
 

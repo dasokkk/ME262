@@ -178,12 +178,34 @@ class ConsoleUI:
             "  [bold]6.[/bold] [cyan]Ollama AI model[/cyan]"
         )
         self.console.print(
-            "     [dim]The LLM model for the AI analyst (must be pulled in Ollama).[/dim]"
+            "     [dim]The LLM model for the AI analyst. Type 'noai' to disable AI analysis.[/dim]"
         )
         model = Prompt.ask(
             "     [cyan]Model[/cyan]",
             default=preset_model or "llama3.2",
         )
+        self.console.print()
+
+        self.console.print(
+            "  [bold]7.[/bold] [cyan]Advanced Evasion Features[/cyan] [dim](Optional)[/dim]"
+        )
+        spoof_app = Confirm.ask("     [cyan]Spoof Application Layer (HTTP/TLS/DNS)[/cyan]", default=False)
+        full_connect = Confirm.ask("     [cyan]Full TCP Handshake (Connect Scan)[/cyan]", default=False)
+        ssl_scan = Confirm.ask("     [cyan]Encrypted Scanning (SSL/TLS)[/cyan]", default=False)
+        
+        proxy_raw = Prompt.ask("     [cyan]Proxy Route (e.g. socks5://127.0.0.1:9050)[/cyan]", default="")
+        proxy = proxy_raw.strip() if proxy_raw.strip() else None
+        
+        mtu_raw = Prompt.ask("     [cyan]IP Fragmentation MTU (e.g. 8, 16)[/cyan]", default="")
+        mtu = None
+        if mtu_raw.strip():
+            try:
+                mtu = int(mtu_raw)
+            except ValueError:
+                self.warn("Invalid MTU, ignoring.")
+                
+        disable_ids = Confirm.ask("     [cyan]Disable Suricata IDS Monitoring?[/cyan]", default=False)
+
         self.console.print()
 
         
@@ -213,6 +235,12 @@ class ConsoleUI:
             "port_strategy": port_strategy,
             "rate": rate,
             "timeout": timeout,
+            "spoof_app": spoof_app,
+            "full_connect": full_connect,
+            "ssl_scan": ssl_scan,
+            "proxy": proxy,
+            "mtu": mtu,
+            "disable_ids": disable_ids,
         }
 
     

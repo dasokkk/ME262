@@ -256,7 +256,7 @@ class AIController:
                 }
             seen[alert.signature_id]["ports"].append(alert.dst_port)
 
-        prompt = f"🚨 SURICATA DETECTIONS ({len(alerts)} alerts, {len(seen)} unique signatures)\n"
+        prompt = f"SURICATA DETECTIONS ({len(alerts)} alerts, {len(seen)} unique signatures)\n"
         for sid, info in seen.items():
             ports_str = ", ".join(str(p) for p in sorted(set(info["ports"]))[:10])
             if len(info["ports"]) > 10:
