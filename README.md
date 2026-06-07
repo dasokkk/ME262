@@ -14,17 +14,27 @@
 
 - **Interactive Setup Wizard:** Effortlessly configure targets, profiles, evasion techniques, and AI models through a guided console UI.
 - **Advanced Evasion Engine:** Every packet is unique. ME262 randomizes TTL, TCP Window Size, IP ID, and shuffles TCP Options (MSS, SackOK, WScale) to defeat signature-based detection.
-- **Evasion Suite:** Extensive evasion techniques including App-Layer Spoofing (HTTP/TLS/DNS), Full Connect scans, real SSL/TLS handshakes, Proxy Routing, and IP Fragmentation (MTU).
-- **Real-Time IDS Feedback:** Integrated with **Suricata IDS**. The scanner monitors its own detection rate in real-time.
-- **AI-Powered Analyst:** Powered by **Ollama**, the built-in AI analyst reads live Suricata logs and provides strategic advice on how to adjust parameters to remain stealthy.
-- **Operational Control & "No-AI" Fallback:** Includes a robust fallback mechanism with real-time detection alerting to enhance stealth and operator control against NGNIPS when AI is disabled.
+- **Full Evasion Suite:** App-Layer Spoofing (HTTP/TLS/DNS), Full Connect scans, real SSL/TLS handshakes, Proxy Routing, IP Fragmentation (MTU), **decoy scanning**, **source IP/MAC spoofing**, **custom TTL**, **IP options**, and **bad TCP checksums**.
+- **Closed AI Control Loop:** The AI analyst can now actually enact what it recommends — it adjusts the full evasion surface (rate, timing, fragmentation, app-spoofing, proxy, decoys, TTL, checksums …), all validated before being applied.
+- **Adaptive Detection-Rate Controller:** Tracks the live detection rate (alerts ÷ probes over a sliding window) and, when it crosses a configurable threshold, automatically walks an escalating ladder of stealth adjustments — a real **No-AI fallback** that adapts instead of just pausing.
+- **Auto-Evade Mode:** `--auto-evade` lets the scanner converge on a quiet configuration on its own, with no operator prompts.
+- **Pluggable IDS Backends:** Run against **Suricata** behind a single interface — with **Snort** and **Zeek** available as *experimental* backends. Suricata is the fully validated default; Snort/Zeek are implemented but require extra configuration and have not yet been validated end-to-end (see *IDS Evaluation & Evasion*).
+- **Evasion Memory:** Persists which parameter sets triggered which signatures across runs and feeds that history back to the AI analyst.
+- **Recon Depth:** Optional banner/version grabbing on open ports.
+- **Multi-Target & CIDR/IPv6:** Scan a single host, a comma-separated list, or a whole `10.0.0.0/24` range (IPv4 and IPv6).
+- **Session Reporting:** Export JSON/CSV results plus an after-action evasion debrief with `--export`.
+- **AI-Powered Analyst:** Powered by **Ollama**, the built-in AI analyst reads live IDS logs and provides strategic advice on how to adjust parameters to remain stealthy.
 - **Stealth SYN Scanning:** High-performance, half-open scanning that evades kernel-level connection logging.
+- **Tunable Scan Profiles:** Flip the entire timing/port/timeout posture with a single flag — `-f` (aggressive), `-n` (normal), or `-s` (stealth) — or override the scan rate (`-r`) and per-probe timeout (`--timeout`) directly.
+- **Flexible Port Selection:** Pick how ports are chosen with `-p` — `top` well-known ports, a `random` sample, a `sequential` 1–1024 sweep, or a `weighted` mix of top + random high ports.
+- **Operational Controls:** Quiet output that shows only open ports and IDS alerts (`-q`), explicit sniff/send interface selection (`-I`), and independent toggles to run without the AI analyst (`--disable-ai`) or without IDS monitoring (`--disable-ids`).
 
 ---
 
 ## Tech Stack
 - **Packet Crafting:** Scapy (Raw L3/L4 Injection)
-- **IDS Engine:** Suricata (AF_PACKET / Interface Monitoring)
+- **IDS Engines:** Suricata (validated) / Snort / Zeek (experimental) — Interface Monitoring
+- **AI Analyst:** Ollama (local LLM HTTP API)
 
 ---
 
@@ -70,9 +80,17 @@ ME262 includes a "Paranoid Mode" in `config.json` that enables custom high-sensi
 
 ```json
 "ids": {
-    "use_custom_rules": true
+    "engine": "suricata",
+    "use_custom_rules": true,
+    "time_window": 10.0,
+    "detection_threshold": 0.45,
+    "snort_config": null,
+    "zeek_scripts": []
 }
 ```
+
+- **`engine`** — choose `suricata`, `snort`, or `zeek` (or pass `--ids-engine`). **Suricata** is the validated default. **Snort** and **Zeek** are *experimental*: Snort needs a config (`snort_config`) to load any rules, and Zeek needs a scan-detection script (`zeek_scripts`) or it will not raise any notices. Neither has been validated end-to-end yet.
+- **`time_window` / `detection_threshold`** — drive the adaptive controller. When `alerts ÷ probes` over the window exceeds the threshold, the No-AI fallback (and `--auto-evade`) escalate evasion automatically.
 ---
 
 ## Screenshots:
@@ -108,6 +126,39 @@ ME262 includes a "Paranoid Mode" in `config.json` that enables custom high-sensi
 ## Author
 by **dasokk**
 - **GitHub:** [dasokkk](https://github.com/dasokkk)
+
+## Supported Evasion & Recon Options
+
+| Approach | Argument |
+| :--- | :--- |
+| Hide a scan with decoys | `-D DECOY_IP1,DECOY_IP2,ME` |
+| Hide a scan with random decoys | `-D RND,RND,ME` |
+| Route connections through proxies | `--proxy socks5://127.0.0.1:9050` |
+| Spoof source MAC address | `--spoof-mac MAC_ADDRESS` |
+| Spoof source IP address | `-S IP_ADDRESS` |
+| Use a specific source port number | `-g PORT_NUM` |
+| Set TTL | `--ttl VALUE` |
+| Set IP Options | `--ip-options HEX_STRING` (e.g. `\x01\x07`) |
+| Use a bad TCP checksum | `--badsum` |
+| Spoof app-layer payloads | `--spoof-app` |
+| Full TCP handshake (connect) | `--full-connect` |
+| Real SSL/TLS handshake | `--ssl-scan` |
+| Fragment packets | `--mtu 16` |
+| Grab banners / versions | `--banner-grab` |
+| Auto-adapt on detection | `--auto-evade` |
+| Choose IDS backend | `--ids-engine {suricata,snort,zeek}` *(snort/zeek experimental)* |
+| Choose a scan profile | `-f` (aggressive) · `-n` (normal) · `-s` (stealth) |
+| Select a port strategy | `-p {top,random,sequential,weighted}` |
+| Set the scan rate (probes/sec) | `-r RATE` |
+| Set the per-probe timeout | `--timeout SECONDS` |
+| Pick the sniff/send interface | `-I IFACE` |
+| Quiet output (open ports + alerts only) | `-q` |
+| Export reports | `--export PREFIX` |
+
+---
+
+> [!NOTE]
+> **IP Options:** One of the IP header fields is the IP Options field. ME262 lets you control it with `--ip-options HEX_STRING`, where each byte is written as `\xHH` (two hexadecimal digits per byte).
 
 ---
 
