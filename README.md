@@ -99,6 +99,10 @@ ME262 includes a "Paranoid Mode" in `config.json` that enables custom high-sensi
 
 ---
 
+<img width="568" height="309" alt="image" src="https://github.com/user-attachments/assets/b1574d91-078c-41e2-8bac-56c41e47ec04" />
+
+---
+
 <img width="1104" height="553" alt="Ekran görüntüsü 2026-04-23 151811" src="https://github.com/user-attachments/assets/49cb945d-0cb2-43d3-be2b-5848089ed9c6" />
 
 ---
@@ -112,10 +116,6 @@ ME262 includes a "Paranoid Mode" in `config.json` that enables custom high-sensi
 ---
 
 <img width="1045" height="744" alt="Ekran görüntüsü 2026-04-23 151930" src="https://github.com/user-attachments/assets/11d2d0fc-acd5-42fb-9d07-84c7235fe881" />
-
----
-
-<img width="568" height="309" alt="image" src="https://github.com/user-attachments/assets/790e5356-3a0b-4925-a06f-aa7bd8b4c006" />
 
 ---
 
