@@ -111,7 +111,7 @@ ME262 includes a "Paranoid Mode" in `config.json` that enables custom high-sensi
 
 ---
 
-<img width="1094" height="565" alt="Ekran görüntüsü 2026-04-23 151913" src="https://github.com/user-attachments/assets/c4f04ec1-e380-4b14-bc60-ad786f1b6c96" />
+<img width="1920" height="725" alt="image" src="https://github.com/user-attachments/assets/af88724b-e13d-4c8e-8f83-7f90d8d46496" />
 
 ---
 
