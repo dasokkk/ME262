@@ -115,6 +115,10 @@ ME262 includes a "Paranoid Mode" in `config.json` that enables custom high-sensi
 
 ---
 
+<img width="568" height="309" alt="image" src="https://github.com/user-attachments/assets/790e5356-3a0b-4925-a06f-aa7bd8b4c006" />
+
+---
+
 ## Suggested AI Config After Detection:
 
 ---
